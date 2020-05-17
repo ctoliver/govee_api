@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from govee_api import api, device
 import time
 import colour
@@ -24,7 +26,7 @@ def main():
     govee_cli.update_device_list()
 
     print('Preparing for action :-)')
-    # Don't do this in real life. Use the callbacks the client provides to you!
+    # Don't do this in real life. Use the callbacks (e.g. "new device found") the client provides to you!
     time.sleep(10)
 
     # Loop over all devices
