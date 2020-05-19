@@ -6,7 +6,7 @@ class _AbstractGoveeDeviceFactory(abc.ABC):
     """ Declare an interface for operations that create abstract Govee devices """
 
     @abc.abstractmethod
-    def build(self, govee, identifier, topic, sku, name, connected):
+    def build(self, govee, identifier, topic, sku, name, mac_address, connected):
         """ Build Govee device """
 
         pass
@@ -15,18 +15,18 @@ class _AbstractGoveeDeviceFactory(abc.ABC):
 class _GoveeBulbFactory(_AbstractGoveeDeviceFactory):
     """ Implement the operations to build Govee bulb devices """
 
-    def build(self, govee, identifier, topic, sku, name, connected):
+    def build(self, govee, identifier, topic, sku, name, mac_address, connected):
         if sku == 'H6085':
-            return dev.GoveeWhiteBulb(govee, identifier, topic, sku, name, connected)
+            return dev.GoveeWhiteBulb(govee, identifier, topic, sku, name, mac_address, connected)
         else:
-            return dev.GoveeBulb(govee, identifier, topic, sku, name, connected)
+            return dev.GoveeBulb(govee, identifier, topic, sku, name, mac_address, connected)
 
 
 class _GoveeLedStripFactory(_AbstractGoveeDeviceFactory):
     """ Implement the operations to build Govee LED strip devices """
 
-    def build(self, govee, identifier, topic, sku, name, connected):
-        return dev.GoveeLedStrip(govee, identifier, topic, sku, name, connected)
+    def build(self, govee, identifier, topic, sku, name, mac_address, connected):
+        return dev.GoveeLedStrip(govee, identifier, topic, sku, name, mac_address, connected)
 
 
 #class _GoveeStringLightFactory(_AbstractGoveeDeviceFactory):

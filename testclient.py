@@ -1,12 +1,26 @@
 #!/usr/bin/env python
 
-from govee_api import api, device
+from govee_api import api, device, helper
 import time
 import colour
+import pygatt
 
 def main():
+    # Create Bluetooth adapter
+    if helper.can_use_bt_gatttool():
+        # Use Linux gatttool service
+        bluetooth_adapter = pygatt.GATTToolBackend()
+    else:
+        # On Windows, you may need to explicitly define the serial port of your BGAPI-compatible device,
+        # e.g. pygatt.BGAPIBackend(serial_port = 'COM9')
+        bluetooth_adapter = pygatt.BGAPIBackend()
+
+    # HINT: If the bluetooth_adapter is None, the API will try to determine the best matching adapter for you. This may
+    # work or may cause errors, most likely on Windows. Thus, I would recommend you to manually set the adapter everytime
+    # it is possible
+
     # Create Govee client and configure event handlers
-    govee_cli = api.Govee('your_email', 'your_password', 'your_client_id_or_EMPTY')
+    govee_cli = api.Govee('your_email', 'your_password', 'your_client_id_or_EMPTY', bluetooth_adapter)
     # BEWARE: This will create a new Govee Client ID with every login. It is recommended to provide an existing client ID
     # within the `Govee` contructor. You can fetch your generated client ID via `govee.client_id` after your successful login
 

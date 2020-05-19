@@ -1,4 +1,5 @@
 import govee_api.device_factory as dev_factory
+import govee_api.helper as helper
 
 import requests
 import time
@@ -10,6 +11,8 @@ import os
 import ssl
 import AWSIoTPythonSDK.MQTTLib
 import json
+import pygatt
+import enum
 
 
 
@@ -21,7 +24,18 @@ _GOVEE_API_KEY = 'm20xwttRNzBIKE8KP8wP5Mz7S61aSFa8x9cYOTU9'
 _GOVEE_MQTT_PROTOCOL_NAME = 'x-amzn-mqtt-ca'
 _GOVEE_MQTT_BROKER_HOST = 'aqm3wd1qlc3dy-ats.iot.us-east-1.amazonaws.com'
 _GOVEE_MQTT_BROKER_PORT = 8883
+_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC = '00010203-0405-0607-0809-0a0b0c0d2b11'
 
+
+# TODO: keep alive
+# https://github.com/egold555/Govee-H6113-Reverse-Engineering
+
+
+class BluetoothCommand(enum.IntEnum):
+    """ A Bluetooth control command packet's type """
+    TURN = 0x01
+    BRIGHTNESS = 0x04
+    COLOR = 0x05
 
 
 class GoveeException(Exception):
@@ -49,7 +63,7 @@ class GoveeException(Exception):
 class Govee(object):
     """ Govee API client allowing us to communicate with Govee and thus with Govee Smart products """
 
-    def __init__(self, email, passwd, client_id = None):
+    def __init__(self, email, passwd, client_id = None, bluetooth_adapter = None):
         """ Creates a new Govee API client """
 
         super(Govee, self).__init__()
@@ -83,12 +97,36 @@ class Govee(object):
         self.__mqtt_topic = None
         self.__mqtt_root_ca = os.path.join(pathlib.Path(__file__).parent.absolute(), 'cert', 'AmazonRootCA1.pem')
 
-        # Device cache
+        # Bluetooth adapter
+        self.__bluetooth_adapter = bluetooth_adapter
+        if not self.__bluetooth_adapter:
+            # Try to get the `post possible` Bluetooth adapter in case no adapter was provided
+            self.__bluetooth_adapter = helper.try_get_best_possible_bluetooth_adapter()
+        self.__init_bluetooth_if_required()
+
+        # Device caches
         self.__devices = {}
+        self.__bluetooth_connections = {}
 
         # Events
         self.on_new_device = self.__empty_event_handler
         self.on_device_update = self.__empty_event_handler
+
+    def __del__(self):
+        """ Destroys the Govee API client """
+
+        # TODO: Stop MQTT
+
+        # Disconnect from all Bluetooth devices
+        for con in self.__bluetooth_connections.values():
+            try:
+                con.disconnect()
+            except:
+                pass
+
+        # Stop Bluetooth service
+        if self.__bluetooth_adapter:
+            self.__bluetooth_adapter.stop()
 
     @property
     def client_id(self):
@@ -280,8 +318,10 @@ class Govee(object):
                 continue
             name = raw_device['deviceName']
             device_settings = json.loads(raw_device['deviceExt']['deviceSettings'])
-            if not 'topic' in device_settings.keys():
+            device_settings_keys = device_settings.keys()
+            if not 'address' in device_settings_keys and not 'topic' in device_settings_keys:
                 continue
+            mac_address = device_settings['address']
             topic = device_settings['topic']
 
             if identifier in self.__devices.keys():
@@ -296,7 +336,7 @@ class Govee(object):
                     connected = last_device_data['online']
                 else:
                     connected = None
-                device = device_factory.build(self, identifier, topic, sku, name, connected)
+                device = device_factory.build(self, identifier, topic, sku, name, mac_address, connected)
                 if device:
                     self.__devices[identifier] = device
                     self.on_new_device(self, device, raw_device)
@@ -390,8 +430,59 @@ class Govee(object):
         device._update_state(state)
         self.on_device_update(self, device, raw_json)
 
-    def _publish_payload(self, device, command, data):
-        """ Publish message to device """
+    def __init_bluetooth_if_required(self):
+        """ Initialize Bluetooth in case if was not initialized yet """
+
+        if self.__bluetooth_adapter and not self.__bluetooth_adapter._running.is_set():
+            try:
+                self.__bluetooth_adapter.start()
+            except:
+                # TODO: Publish status event (do this also for IOT etc.)
+                return False
+        if self.__bluetooth_adapter:
+            return self.__bluetooth_adapter._running.is_set()
+        else:
+            return False
+
+    def _publish_bt_payload(self, device, command, data):
+        """ Publish Bluetooth message to device """
+
+        if not self.__init_bluetooth_if_required():
+            # Unable to initialize Bluetooth
+            return
+
+        if len(data) > 17:
+            raise GoveeException('Bluetooth data payload too long. Command: {}, Data: {}'.format(command, data))
+
+        try:
+            if device._mac_address in self.__bluetooth_connections.keys():
+                bt = self.__bluetooth_connections[device._mac_address]
+            else:
+                bt = self.__bluetooth_adapter.connect(device._mac_address)
+                self.__bluetooth_connections[device._mac_address] = bt
+
+            # Build Bluetooth packet data and pad it to a length of 19 bytes
+            packet = bytes([0x33, command]) + bytes(data)
+            packet += bytes([0x00] * (19 - len(packet)))
+
+            # Calculate checksum by XORing all data bytes and add it to the end of the packet
+            checksum = 0
+            for byte in packet:
+                checksum ^= byte
+            packet += bytes([checksum & 0xFF])
+
+            # Send data
+            bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, packet)
+        except:
+            # TODO: Status Log
+            if bt:
+                try:
+                    bt.disconnect()
+                except:
+                    pass
+
+    def _publish_iot_payload(self, device, command, data):
+        """ Publish IOT/MQTT message to device """
 
         payload = {
             'msg': {
@@ -422,6 +513,7 @@ class Govee(object):
         }
         """
 
+        # TODO: Try/Except + Status Log
         self.__mqtt_connection.publish(device._topic, json_payload, 0)
 
     def __get_absolute_cert_files(self):

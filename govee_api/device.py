@@ -6,7 +6,7 @@ import math
 class GoveeDevice(abc.ABC):
     """ Govee Smart device """
     
-    def __init__(self, govee, identifier, topic, sku, name, connected):
+    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
         """ Creates a new Govee device """
 
         super(GoveeDevice, self).__init__()
@@ -16,7 +16,8 @@ class GoveeDevice(abc.ABC):
         self.__topic = topic
         self.__sku = sku
         self.__name = name
-        self.__connected = connected
+        self.__mac_address = mac_address
+        self.__iot_connected = iot_connected
 
     @property
     def identifier(self):
@@ -59,10 +60,16 @@ class GoveeDevice(abc.ABC):
         pass
 
     @property
-    def connected(self):
-        """ Gets if the device is connected with the Cloud """
+    def _mac_address(self):
+        """ Gets the device's Bluetooth MAC address """
+        
+        return self.__mac_address
 
-        return self.__connected
+    @property
+    def iot_connected(self):
+        """ Gets if the device is connected with the cloud """
+
+        return self.__iot_connected
 
     @abc.abstractmethod
     def request_status(self):
@@ -75,27 +82,27 @@ class GoveeDevice(abc.ABC):
 
         conn = state['connected']
         if isinstance(conn, bool):
-            self.__connected = conn
+            self.__iot_connected = conn
         elif conn == 'true':
-            self.__connected = True
+            self.__iot_connected = True
         elif conn == 'false':
-            self.__connected = False
+            self.__iot_connected = False
         else:
-            self.__connected = None
+            self.__iot_connected = None
 
-    def _publish_command(self, command, data):
+    def _publish_iot_command(self, command, data):
         """ Build command to control Govee Smart device """
 
-        self.__govee._publish_payload(self, command, data)
+        self.__govee._publish_iot_payload(self, command, data)
 
 
 class ToggleableGoveeDevice(GoveeDevice):
     """ Toggleable Govee Smart device """
     
-    def __init__(self, govee, identifier, topic, sku, name, connected):
+    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
         """ Creates a new toggleable Govee device """
 
-        super(ToggleableGoveeDevice, self).__init__(govee, identifier, topic, sku, name, connected)
+        super(ToggleableGoveeDevice, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
 
         self.__on = None
     
@@ -120,7 +127,7 @@ class ToggleableGoveeDevice(GoveeDevice):
         """ Turn the device on or off """
 
         if val != self.__on:
-            self._publish_command('turn', {
+            self._publish_iot_command('turn', {
                 'val': val
             })
 
@@ -135,10 +142,10 @@ class ToggleableGoveeDevice(GoveeDevice):
 class GoveeLight(ToggleableGoveeDevice):
     """ Represents a Govee light of any type """
 
-    def __init__(self, govee, identifier, topic, sku, name, connected):
+    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
         """ Creates a new abstract Govee light device """
 
-        super(GoveeLight, self).__init__(govee, identifier, topic, sku, name, connected)
+        super(GoveeLight, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
 
         self.__brightness = None
 
@@ -159,7 +166,7 @@ class GoveeLight(ToggleableGoveeDevice):
         """ Sets the light brightness """
 
         if val != self.__brightness:
-            self._publish_command('brightness', {
+            self._publish_iot_command('brightness', {
                 'val': self.__calc_brightness(val)
             })
 
@@ -170,7 +177,7 @@ class GoveeLight(ToggleableGoveeDevice):
         # (=no data) `turn` command to them. I do not know how the official app does it and
         # I don't want to decompile it for legal reasons.
 
-        self._publish_command('turn', {})
+        self._publish_iot_command('turn', {})
 
     def _update_state(self, state):
         """ Update device state """
@@ -183,10 +190,10 @@ class GoveeLight(ToggleableGoveeDevice):
 class GoveeRgbLight(GoveeLight):
     """ Represents a Govee RGB light of any type """
 
-    def __init__(self, govee, identifier, topic, sku, name, connected):
+    def __init__(self, govee, identifier, topic, sku, name, iot_connected):
         """ Creates a new abstract Govee RGB light device """
 
-        super(GoveeRgbLight, self).__init__(govee, identifier, topic, sku, name, connected)
+        super(GoveeRgbLight, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
 
         self.__color = None
         self.__color_temperature = None
@@ -210,7 +217,7 @@ class GoveeRgbLight(GoveeLight):
         if val:
             red, green, blue = self._calc_color(val)
 
-            self._publish_command('color', {
+            self._publish_iot_command('color', {
                 'red': red,
                 'green': green,
                 'blue': blue
@@ -252,7 +259,7 @@ class GoveeRgbLight(GoveeLight):
 
         color_temp = self.__fix_color_temperature(val)
         if color_temp > 0 and color_temp != self.__color_temperature:
-            self._publish_command('colorTem', {
+            self._publish_iot_command('colorTem', {
                 'color': self.__kelvin_to_color(color_temp),
                 'colorTemInKelvin': color_temp
             })
@@ -314,10 +321,10 @@ class GoveeRgbLight(GoveeLight):
 class GoveeWhiteBulb(GoveeLight):
     """ Represents a Govee bulb """
 
-    def __init__(self, govee, identifier, topic, sku, name, connected):
+    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
         """ Creates a new Govee white bulb device """
 
-        super(GoveeWhiteBulb, self).__init__(govee, identifier, topic, sku, name, connected)
+        super(GoveeWhiteBulb, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
 
     @property
     def friendly_name(self):
@@ -329,10 +336,10 @@ class GoveeWhiteBulb(GoveeLight):
 class GoveeBulb(GoveeRgbLight):
     """ Represents a Govee RGB bulb """
 
-    def __init__(self, govee, identifier, topic, sku, name, connected):
+    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
         """ Creates a new Govee RGB bulb device """
 
-        super(GoveeBulb, self).__init__(govee, identifier, topic, sku, name, connected)
+        super(GoveeBulb, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
 
     @property
     def friendly_name(self):
@@ -343,10 +350,10 @@ class GoveeBulb(GoveeRgbLight):
 class GoveeLedStrip(GoveeRgbLight):
     """ Represents a Govee LED strip """
 
-    def __init__(self, govee, identifier, topic, sku, name, connected):
+    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
         """ Creates a new Govee LED strip device """
 
-        super(GoveeLedStrip, self).__init__(govee, identifier, topic, sku, name, connected)
+        super(GoveeLedStrip, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
 
     @property
     def friendly_name(self):
