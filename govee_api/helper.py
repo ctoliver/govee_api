@@ -14,5 +14,5 @@ def try_get_best_possible_bluetooth_adapter():
 
     if can_use_bt_gatttool():
         return pygatt.GATTToolBackend()
-    
-    # XXXX TODO
+    else:
+        return pygatt.BGAPIBackend()
