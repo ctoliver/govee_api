@@ -307,6 +307,8 @@ class Govee(object):
         }
         """
 
+        print(res)
+
         # Check response status
         if res['status'] != 200:
             raise GoveeException('Govee answered with device list status {}'.format(res['status'])) 
@@ -321,7 +323,6 @@ class Govee(object):
             device_settings_keys = device_settings.keys()
             if not 'address' in device_settings_keys and not 'topic' in device_settings_keys:
                 continue
-            mac_address = device_settings['address']
             topic = device_settings['topic']
 
             if identifier in self.__devices.keys():
@@ -336,7 +337,7 @@ class Govee(object):
                     connected = last_device_data['online']
                 else:
                     connected = None
-                device = device_factory.build(self, identifier, topic, sku, name, mac_address, connected)
+                device = device_factory.build(self, identifier, topic, sku, name, connected)
                 if device:
                     self.__devices[identifier] = device
                     self.on_new_device(self, device, raw_device)
@@ -433,13 +434,13 @@ class Govee(object):
     def __init_bluetooth_if_required(self):
         """ Initialize Bluetooth in case if was not initialized yet """
 
-        if self.__bluetooth_adapter and not self.__bluetooth_adapter._running.is_set():
-            try:
-                self.__bluetooth_adapter.start()
-            except:
+        if self.__bluetooth_adapter and ((self.__bluetooth_adapter._running and not self.__bluetooth_adapter._running.is_set()) or not self.__bluetooth_adapter._running):
+            #try:
+            self.__bluetooth_adapter.start()
+            #except:
                 # TODO: Publish status event (do this also for IOT etc.)
-                return False
-        if self.__bluetooth_adapter:
+            #    return False
+        if self.__bluetooth_adapter and self.__bluetooth_adapter._running:
             return self.__bluetooth_adapter._running.is_set()
         else:
             return False
@@ -447,39 +448,49 @@ class Govee(object):
     def _publish_bt_payload(self, device, command, data):
         """ Publish Bluetooth message to device """
 
+        print('CHECK')
+
         if not self.__init_bluetooth_if_required():
             # Unable to initialize Bluetooth
             return
 
+        print('OK',len(data))
+
         if len(data) > 17:
             raise GoveeException('Bluetooth data payload too long. Command: {}, Data: {}'.format(command, data))
 
-        try:
-            if device._mac_address in self.__bluetooth_connections.keys():
-                bt = self.__bluetooth_connections[device._mac_address]
-            else:
-                bt = self.__bluetooth_adapter.connect(device._mac_address)
-                self.__bluetooth_connections[device._mac_address] = bt
+        print('OK2')
 
-            # Build Bluetooth packet data and pad it to a length of 19 bytes
-            packet = bytes([0x33, command]) + bytes(data)
-            packet += bytes([0x00] * (19 - len(packet)))
+        #try:
+        bt = None
+        print('HANS')
+        if device._bt_address in self.__bluetooth_connections.keys():
+            bt = self.__bluetooth_connections[device._bt_address]
+        else:
+            bt = self.__bluetooth_adapter.connect(device._bt_address)
+            self.__bluetooth_connections[device._bt_address] = bt
 
-            # Calculate checksum by XORing all data bytes and add it to the end of the packet
-            checksum = 0
-            for byte in packet:
-                checksum ^= byte
-            packet += bytes([checksum & 0xFF])
+        print(bt)
 
-            # Send data
-            bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, packet)
-        except:
+        # Build Bluetooth packet data and pad it to a length of 19 bytes
+        packet = bytes([0x33, command]) + bytes(data)
+        packet += bytes([0x00] * (19 - len(packet)))
+
+        # Calculate checksum by XORing all data bytes and add it to the end of the packet
+        checksum = 0
+        for byte in packet:
+            checksum ^= byte
+        packet += bytes([checksum & 0xFF])
+
+        # Send data
+        bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, packet)
+        #except:
             # TODO: Status Log
-            if bt:
-                try:
-                    bt.disconnect()
-                except:
-                    pass
+        #    if bt:
+        #        try:
+        #            bt.disconnect()
+        #        except:
+        #            pass
 
     def _publish_iot_payload(self, device, command, data):
         """ Publish IOT/MQTT message to device """

@@ -1,12 +1,21 @@
 import govee_api.api as gapi
+import govee_api.command as command
 import abc
 import colour
 import math
+import enum
+
+class ConnectionStatus(enum.Flag):
+    """ Govee device connection status """
+    OFFLINE = enum.auto()
+    IOT_CONNECTED = enum.auto()
+    BT_CONNECTED = enum.auto()
+
 
 class GoveeDevice(abc.ABC):
     """ Govee Smart device """
     
-    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
+    def __init__(self, govee, identifier, topic, sku, name, iot_connected):
         """ Creates a new Govee device """
 
         super(GoveeDevice, self).__init__()
@@ -16,8 +25,10 @@ class GoveeDevice(abc.ABC):
         self.__topic = topic
         self.__sku = sku
         self.__name = name
-        self.__mac_address = mac_address
-        self.__iot_connected = iot_connected
+        if iot_connected:
+            self.__connection_status = ConnectionStatus.IOT_CONNECTED
+        else:
+            self.__connection_status = ConnectionStatus.OFFLINE
 
     @property
     def identifier(self):
@@ -60,16 +71,16 @@ class GoveeDevice(abc.ABC):
         pass
 
     @property
-    def _mac_address(self):
+    def _bt_address(self):
         """ Gets the device's Bluetooth MAC address """
         
-        return self.__mac_address
+        return self.__identifier[6:]
 
     @property
-    def iot_connected(self):
-        """ Gets if the device is connected with the cloud """
+    def connection_status(self):
+        """ Gets the device's connection status """
 
-        return self.__iot_connected
+        return self.__connection_status
 
     @abc.abstractmethod
     def request_status(self):
@@ -81,28 +92,26 @@ class GoveeDevice(abc.ABC):
         """ Update device state """
 
         conn = state['connected']
-        if isinstance(conn, bool):
-            self.__iot_connected = conn
-        elif conn == 'true':
-            self.__iot_connected = True
-        elif conn == 'false':
-            self.__iot_connected = False
+        if (isinstance(conn, bool) and conn) or conn == 'true' :
+            self.__connection_status = self.__connection_status | ConnectionStatus.IOT_CONNECTED
+            self.__connection_status = self.__connection_status & ~ConnectionStatus.OFFLINE
         else:
-            self.__iot_connected = None
+            self.__connection_status = self.__connection_status & ~ConnectionStatus.IOT_CONNECTED
 
     def _publish_iot_command(self, command, data):
         """ Build command to control Govee Smart device """
 
-        self.__govee._publish_iot_payload(self, command, data)
+        self.__govee._publish_bt_payload(self, gapi.BluetoothCommand.COLOR, (255, 255, 0))
+        #self.__govee._publish_iot_payload(self, command, data)
 
 
 class ToggleableGoveeDevice(GoveeDevice):
     """ Toggleable Govee Smart device """
     
-    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
+    def __init__(self, govee, identifier, topic, sku, name, connection_status):
         """ Creates a new toggleable Govee device """
 
-        super(ToggleableGoveeDevice, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
+        super(ToggleableGoveeDevice, self).__init__(govee, identifier, topic, sku, name, connection_status)
 
         self.__on = None
     
@@ -142,10 +151,10 @@ class ToggleableGoveeDevice(GoveeDevice):
 class GoveeLight(ToggleableGoveeDevice):
     """ Represents a Govee light of any type """
 
-    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
+    def __init__(self, govee, identifier, topic, sku, name, iot_connected):
         """ Creates a new abstract Govee light device """
 
-        super(GoveeLight, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
+        super(GoveeLight, self).__init__(govee, identifier, topic, sku, name, iot_connected)
 
         self.__brightness = None
 
@@ -193,7 +202,7 @@ class GoveeRgbLight(GoveeLight):
     def __init__(self, govee, identifier, topic, sku, name, iot_connected):
         """ Creates a new abstract Govee RGB light device """
 
-        super(GoveeRgbLight, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
+        super(GoveeRgbLight, self).__init__(govee, identifier, topic, sku, name, iot_connected)
 
         self.__color = None
         self.__color_temperature = None
@@ -321,10 +330,10 @@ class GoveeRgbLight(GoveeLight):
 class GoveeWhiteBulb(GoveeLight):
     """ Represents a Govee bulb """
 
-    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
+    def __init__(self, govee, identifier, topic, sku, name, iot_connected):
         """ Creates a new Govee white bulb device """
 
-        super(GoveeWhiteBulb, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
+        super(GoveeWhiteBulb, self).__init__(govee, identifier, topic, sku, name, iot_connected)
 
     @property
     def friendly_name(self):
@@ -336,10 +345,10 @@ class GoveeWhiteBulb(GoveeLight):
 class GoveeBulb(GoveeRgbLight):
     """ Represents a Govee RGB bulb """
 
-    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
+    def __init__(self, govee, identifier, topic, sku, name, iot_connected):
         """ Creates a new Govee RGB bulb device """
 
-        super(GoveeBulb, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
+        super(GoveeBulb, self).__init__(govee, identifier, topic, sku, name, iot_connected)
 
     @property
     def friendly_name(self):
@@ -350,10 +359,10 @@ class GoveeBulb(GoveeRgbLight):
 class GoveeLedStrip(GoveeRgbLight):
     """ Represents a Govee LED strip """
 
-    def __init__(self, govee, identifier, topic, sku, name, mac_address, iot_connected):
+    def __init__(self, govee, identifier, topic, sku, name, iot_connected):
         """ Creates a new Govee LED strip device """
 
-        super(GoveeLedStrip, self).__init__(govee, identifier, topic, sku, name, mac_address, iot_connected)
+        super(GoveeLedStrip, self).__init__(govee, identifier, topic, sku, name, iot_connected)
 
     @property
     def friendly_name(self):

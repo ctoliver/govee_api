@@ -45,75 +45,72 @@ def main():
 
     # Loop over all devices
     for dev in govee_cli.devices.values():
-        if dev.connected:
-            print('Fun with device {} ...'.format(dev.name))
+        print('Fun with device {} ...'.format(dev.name))
 
-            # Turn on device
-            dev.on = True
+        # Turn on device
+        dev.on = True
 
-            # Wait a second
-            time.sleep(1)
+        # Wait a second
+        time.sleep(1)
 
-            # Save initial brightness
-            brightness_backup = dev.brightness
+        # Save initial brightness
+        brightness_backup = dev.brightness
 
-            # Set brightness to 50%
-            dev.brightness = 0.5
+        # Set brightness to 50%
+        dev.brightness = 0.5
 
-            # Wait a second
-            time.sleep(1)
+        # Wait a second
+        time.sleep(1)
 
-            # Set brightness to 100%
-            dev.brightness = 1.0
+        # Set brightness to 100%
+        dev.brightness = 1.0
 
-            # Wait a second
-            time.sleep(1)
+        # Wait a second
+        time.sleep(1)
 
-            if isinstance(dev, device.GoveeRgbLight):
-                # Save initial color
-                color_backup = dev.color
+        if isinstance(dev, device.GoveeRgbLight):
+            # Save initial color
+            color_backup = dev.color
 
-                # Set color temperature to 2100 kelvin (warm white)
-                dev.color_temperature = 2100
-
-                # Wait a second
-                time.sleep(1)
-
-                # Set color to green
-                dev.color = colour.Color('green')
-
-                # Wait a second
-                time.sleep(1)
-
-                # Set color to red
-                dev.color = (255, 0, 0)
-
-                # Wait a second
-                time.sleep(1)
-
-                # Set color to dodgerblue
-                dev.color = colour.Color('dodgerblue')
-
-                # Wait a second
-                time.sleep(1)
-
-                # Restore color
-                if color_backup:
-                    dev.color = color_backup
+            # Set color temperature to 2100 kelvin (warm white)
+            dev.color_temperature = 2100
 
             # Wait a second
             time.sleep(1)
 
-            # Restore initial brightness
-            dev.brightness = brightness_backup
+            # Set color to green
+            dev.color = colour.Color('green')
 
             # Wait a second
             time.sleep(1)
 
-            # Turn the device off
-            dev.on = False
-        else:
-            print('Device {} is not connected. Skipping...'.format(dev.name))
+            # Set color to red
+            dev.color = (255, 0, 0)
+
+            # Wait a second
+            time.sleep(1)
+
+            # Set color to dodgerblue
+            dev.color = colour.Color('dodgerblue')
+
+            # Wait a second
+            time.sleep(1)
+
+            # Restore color
+            if color_backup:
+                dev.color = color_backup
+
+        # Wait a second
+        time.sleep(1)
+
+        # Restore initial brightness
+        dev.brightness = brightness_backup
+
+        # Wait a second
+        time.sleep(1)
+
+        # Turn the device off
+        dev.on = False
 
     print('All done!')
 
@@ -126,7 +123,7 @@ def _on_new_device(govee_cli, dev, raw_data):
     print('NEW DEVICE [{}][{} {}] {} -> Connected: {}'.format(dev.identifier, dev.sku, dev.friendly_name, dev.name, \
          connected_str))
 
-def _on_device_update(govee_cli, dev, old_dev, raw_data):
+def _on_device_update(govee_cli, dev, raw_data):
     """ Device update event """
 
     connected_str = _get_connected_str(dev.connected)
