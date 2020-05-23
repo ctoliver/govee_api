@@ -30,6 +30,9 @@ def main():
     # Event raised when a device status was updated
     govee_cli.on_device_update = _on_device_update
 
+    # Event raised when an API/connection error occurs
+    govee_cli.on_error = _on_error
+
     # Login to Govee
     govee_cli.login()
 
@@ -140,6 +143,14 @@ def _on_device_update(govee_cli, dev, raw_data):
     else:
         print('DEVICE UPDATE [{}][{} {}] {} -> Connected: {}, On: {}, Brightness: {}'.format(dev.identifier, dev.sku, \
             dev.friendly_name, dev.name, dev.connection_status, on_str, dev.brightness))
+
+def _on_error(govee_cli, dev, message, exception):
+    """ API error event """
+
+    if dev:
+        print('ERROR [{}][{}][{}][{}] -> {}'.format(dev.identifier, dev.sku, dev.friendly_name, dev.name, message))
+    else:
+        print('ERROR -> {}'.format(message))
 
 
 if __name__ == '__main__':

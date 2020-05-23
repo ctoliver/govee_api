@@ -13,10 +13,7 @@ import AWSIoTPythonSDK.MQTTLib
 import json
 import pygatt
 import enum
-
-
-
-import binascii # TODO: Remove
+import binascii
 
 
 
@@ -30,9 +27,6 @@ _GOVEE_MQTT_BROKER_HOST = 'aqm3wd1qlc3dy-ats.iot.us-east-1.amazonaws.com'
 _GOVEE_MQTT_BROKER_PORT = 8883
 _GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC = '00010203-0405-0607-0809-0a0b0c0d2b11'
 
-
-# TODO: keep alive
-# https://github.com/egold555/Govee-H6113-Reverse-Engineering
 
 
 class BluetoothCommand(enum.IntEnum):
@@ -115,11 +109,17 @@ class Govee(object):
         # Events
         self.on_new_device = self.__empty_event_handler
         self.on_device_update = self.__empty_event_handler
+        self.on_error = self.__empty_error_event_handler
 
     def __del__(self):
         """ Destroys the Govee API client """
 
-        # TODO: Stop MQTT
+        # Disconnect from MQTT
+        if self.__mqtt_connection:
+            try:
+                self.__mqtt_connection.disconnect()
+            except:
+                pass
 
         # Disconnect from all Bluetooth devices
         for con in self.__bluetooth_connections.values():
@@ -151,6 +151,11 @@ class Govee(object):
 
     def __empty_event_handler(self, govee, device, raw_data):
         """ Empty event handler that should be overwritten by the client """
+
+        pass
+
+    def __empty_error_event_handler(self, govee, device, message, exception):
+        """ Empty error event handler that should be overwritten by the client """
 
         pass
 
@@ -222,7 +227,7 @@ class Govee(object):
                 mqtt_certs = self.__get_absolute_cert_files()
 
             # Disconnect from MQTT broker
-            if self.__mqtt_connection and self.__mqtt_connection:
+            if self.__mqtt_connection:
                 try:
                     self.__mqtt_connection.disconnect()
                 except:
@@ -440,8 +445,8 @@ class Govee(object):
             try:
                 self.__bluetooth_adapter.start()
                 return self.__bluetooth_adapter._running.is_set()
-            except:
-                # TODO: Publish status event (do this also for IOT etc.)
+            except Exception as e:
+                self.on_error(self, None, 'Unable to initialize Bluetooth adapter', e)
                 return False
         if self.__bluetooth_adapter and self.__bluetooth_adapter._running:
             return self.__bluetooth_adapter._running.is_set()
@@ -454,8 +459,9 @@ class Govee(object):
         if not self.__init_bluetooth_if_required():
             # Unable to initialize Bluetooth
             return
+
         if len(data) > 17:
-            raise GoveeException('Bluetooth data payload too long. Command: {}, Data: {}'.format(command, data))
+            raise GoveeException('Bluetooth data payload too long. Command: {}, Data: {}'.format(command, binascii.hexlify(data)))
 
         bt = None
         if device._bt_address in self.__bluetooth_connections.keys():
@@ -467,9 +473,9 @@ class Govee(object):
             while retries < 10:
                 try:
                     if isinstance(self.__bluetooth_adapter, pygatt.GATTToolBackend):
-                        bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=1, auto_reconnect=True)
+                        bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=2, auto_reconnect=True)
                     else:
-                        bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=1)
+                        bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=2)
                     self.__bluetooth_connections[device._bt_address] = bt
                     break
                 except:
@@ -493,8 +499,8 @@ class Govee(object):
         # Send data
         try:
             bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, bytearray(packet)) # Set wait for response to FALSE
-        except:
-            # TODO: Status Log
+        except Exception as e:
+            self.on_error(self, device, 'Unable to send data ({}) via Bluetooth'.format(binascii.hexlify(packet)), e)
             # TODO: Retry feature
             if bt:
                 try:
@@ -534,8 +540,10 @@ class Govee(object):
         }
         """
 
-        # TODO: Try/Except + Status Log
-        self.__mqtt_connection.publish(device._topic, json_payload, 0)
+        try:
+            self.__mqtt_connection.publish(device._topic, json_payload, 0)
+        except Exception as e:
+            self.on_error(self, device, 'Unable to send data ({}) via MQTT'.format(json_payload), e)
 
     def __get_absolute_cert_files(self):
         """ Gets the absolute paths to the to-be-used cert file and private key """
