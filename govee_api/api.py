@@ -457,9 +457,6 @@ class Govee(object):
         if len(data) > 17:
             raise GoveeException('Bluetooth data payload too long. Command: {}, Data: {}'.format(command, data))
 
-        #if device.identifier != 'A4:03:A4:C1:38:6A:81:22':
-        #    return # TODO: REMOVE!
-
         bt = None
         if device._bt_address in self.__bluetooth_connections.keys():
             print('Using existing BT connection to device', device._bt_address)
@@ -469,7 +466,10 @@ class Govee(object):
             retries = 0
             while retries < 10:
                 try:
-                    bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=1, auto_reconnect=True)
+                    if isinstance(self.__bluetooth_adapter, pygatt.GATTToolBackend):
+                        bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=1, auto_reconnect=True)
+                    else:
+                        bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=1)
                     self.__bluetooth_connections[device._bt_address] = bt
                     break
                 except:
@@ -491,15 +491,16 @@ class Govee(object):
         packet += bytes([checksum & 0xFF])
 
         # Send data
-        bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, bytearray(packet)) # Set wait for response to FALSE
-        #except:
+        try:
+            bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, bytearray(packet)) # Set wait for response to FALSE
+        except:
             # TODO: Status Log
-            # Aber zuerst nochmal nen reconnect ausprobieren...!
-        #    if bt:
-        #        try:
-        #            bt.disconnect()
-        #        except:
-        #            pass
+            # TODO: Retry feature
+            if bt:
+                try:
+                    bt.disconnect()
+                except:
+                    pass
 
     def _publish_iot_payload(self, device, command, data):
         """ Publish IOT/MQTT message to device """
