@@ -291,11 +291,7 @@ class GoveeRgbLight(GoveeLight):
         else:
             blue = min(max(138.5177312231 * math.log(color_temp - 10) - 305.0447927307, 0), 255)
 
-        return {
-            'red': int(round(red)),
-            'green': int(round(green)),
-            'blue': int(round(blue))
-        }
+        return (int(round(red)),int(round(green)), int(round(blue)))
 
     def _update_state(self, state):
         """ Update device state """

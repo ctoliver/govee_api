@@ -502,7 +502,6 @@ class Govee(object):
                 return
 
         # Build Bluetooth packet data and pad it to a length of 19 bytes
-        print(payload)
         packet = bytes([0x33, payload[0]]) + bytes(payload[1])
         packet += bytes([0x00] * (19 - len(packet)))
 
