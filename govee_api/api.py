@@ -478,7 +478,7 @@ class Govee(object):
                 print('Unable to connect to device',device._bt_address)
                 return
 
-        print('BT device:', bt)
+        print('Sending BT data to device',device._bt_address)
 
         # Build Bluetooth packet data and pad it to a length of 19 bytes
         packet = bytes([0x33, command]) + bytes(data)
