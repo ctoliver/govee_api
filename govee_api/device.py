@@ -104,7 +104,7 @@ class GoveeDevice(abc.ABC):
         command = [
             0x02, # Manual mode
             0xff, 0xff, 0xff, 0x01,
-            255, 255, 0 # Color
+            255, 0, 0 # Color
         ]
         self.__govee._publish_bt_payload(self, gapi.BluetoothCommand.COLOR, command)
         #self.__govee._publish_iot_payload(self, command, data)
