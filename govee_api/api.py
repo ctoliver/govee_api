@@ -307,8 +307,6 @@ class Govee(object):
         }
         """
 
-        print(res)
-
         # Check response status
         if res['status'] != 200:
             raise GoveeException('Govee answered with device list status {}'.format(res['status'])) 
@@ -435,11 +433,12 @@ class Govee(object):
         """ Initialize Bluetooth in case if was not initialized yet """
 
         if self.__bluetooth_adapter and ((self.__bluetooth_adapter._running and not self.__bluetooth_adapter._running.is_set()) or not self.__bluetooth_adapter._running):
-            #try:
-            self.__bluetooth_adapter.start()
-            #except:
+            try:
+                self.__bluetooth_adapter.start()
+                return self.__bluetooth_adapter._running.is_set()
+            except:
                 # TODO: Publish status event (do this also for IOT etc.)
-            #    return False
+                return False
         if self.__bluetooth_adapter and self.__bluetooth_adapter._running:
             return self.__bluetooth_adapter._running.is_set()
         else:
@@ -447,30 +446,23 @@ class Govee(object):
 
     def _publish_bt_payload(self, device, command, data):
         """ Publish Bluetooth message to device """
-
-        print('CHECK')
-
         if not self.__init_bluetooth_if_required():
             # Unable to initialize Bluetooth
             return
-
-        print('OK',len(data))
-
         if len(data) > 17:
             raise GoveeException('Bluetooth data payload too long. Command: {}, Data: {}'.format(command, data))
 
-        print('OK2')
-
         #try:
         bt = None
-        print('HANS')
         if device._bt_address in self.__bluetooth_connections.keys():
+            print('Using existing BT connection')
             bt = self.__bluetooth_connections[device._bt_address]
         else:
+            print('Connecting to BT device')
             bt = self.__bluetooth_adapter.connect(device._bt_address)
             self.__bluetooth_connections[device._bt_address] = bt
 
-        print(bt)
+        print('BT device:', bt)
 
         # Build Bluetooth packet data and pad it to a length of 19 bytes
         packet = bytes([0x33, command]) + bytes(data)
@@ -486,6 +478,7 @@ class Govee(object):
         bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, packet)
         #except:
             # TODO: Status Log
+            # Aber zuerst nochmal nen reconnect ausprobieren...!
         #    if bt:
         #        try:
         #            bt.disconnect()
