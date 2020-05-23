@@ -485,10 +485,6 @@ class Govee(object):
             checksum ^= byte
         packet += bytes([checksum & 0xFF])
 
-        # TEST
-        packet = bytes.fromhex('330502ffffff01ff932c0000000000000000008a')
-        print(binascii.hexlify(packet))
-        
         # Send data
         bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, bytearray(packet)) # Set wait for response to FALSE
         #except:
