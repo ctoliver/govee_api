@@ -98,16 +98,10 @@ class GoveeDevice(abc.ABC):
         else:
             self.__connection_status = self.__connection_status & ~ConnectionStatus.IOT_CONNECTED
 
-    def _publish_iot_command(self, command, data):
+    def _publish_command(self, command):
         """ Build command to control Govee Smart device """
 
-        command = [
-            0x02, # Manual mode
-            0xff, 0xff, 0xff, 0x01,
-            255, 0, 0 # Color
-        ]
-        self.__govee._publish_bt_payload(self, gapi.BluetoothCommand.COLOR, command)
-        #self.__govee._publish_iot_payload(self, command, data)
+        self.__govee._publish_command(self, command)
 
 
 class ToggleableGoveeDevice(GoveeDevice):
@@ -141,9 +135,12 @@ class ToggleableGoveeDevice(GoveeDevice):
         """ Turn the device on or off """
 
         if val != self.__on:
-            self._publish_iot_command('turn', {
-                'val': val
-            })
+            self._publish_command(command.TurnCommand(val))
+
+    def request_status(self):
+        """ Request device status """
+
+        self._publish_command(command.StatusCommand())
 
     def _update_state(self, state):
         """ Update device state """
@@ -180,18 +177,7 @@ class GoveeLight(ToggleableGoveeDevice):
         """ Sets the light brightness """
 
         if val != self.__brightness:
-            self._publish_iot_command('brightness', {
-                'val': self.__calc_brightness(val)
-            })
-
-    def request_status(self):
-        """ Request device status """
-
-        # I have found out that I can fetch the status of the devices by sending an empty
-        # (=no data) `turn` command to them. I do not know how the official app does it and
-        # I don't want to decompile it for legal reasons.
-
-        self._publish_iot_command('turn', {})
+            self._publish_command(command.BrightnessCommand(self.__calc_brightness(val)))
 
     def _update_state(self, state):
         """ Update device state """
@@ -229,13 +215,10 @@ class GoveeRgbLight(GoveeLight):
         """ Sets the light color """
 
         if val:
-            red, green, blue = self._calc_color(val)
-
-            self._publish_iot_command('color', {
-                'red': red,
-                'green': green,
-                'blue': blue
-            })
+            color = self._calc_color(val)
+            if color:
+                red, green, blue = color
+                self._publish_command(command.ColorCommand(red, green, blue))
 
     def _calc_color(self, val):
         red = 0
@@ -244,7 +227,7 @@ class GoveeRgbLight(GoveeLight):
 
         if isinstance(val, colour.Color):
             if val == self.__color:
-                return
+                return None
             red = int(round(val.red * 255))
             green = int(round(val.green * 255))
             blue = int(round(val.blue * 255))
@@ -253,7 +236,7 @@ class GoveeRgbLight(GoveeLight):
                int(round(self.__color.red * 255)) == val[0] and \
                int(round(self.__color.get_green * 255)) == val[1] and \
                int(round(self.__color.blue * 255)) == val[20]:
-                return
+                return None
             red = val[0]
             green = val[1]
             blue = val[2]
@@ -274,10 +257,8 @@ class GoveeRgbLight(GoveeLight):
 
         color_temp = self.__fix_color_temperature(val)
         if color_temp > 0 and color_temp != self.__color_temperature:
-            self._publish_iot_command('colorTem', {
-                'color': self.__kelvin_to_color(color_temp),
-                'colorTemInKelvin': color_temp
-            })
+            red, green, blue = self.__kelvin_to_color(color_temp)
+            self._publish_command(command.ColorTemperatureCommand(color_temp, red, green, blue))
 
     def __kelvin_to_color(self, color_temperature):
         """ Calculate RGB color based on color temperature """

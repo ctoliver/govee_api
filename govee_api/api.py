@@ -1,5 +1,7 @@
 import govee_api.device_factory as dev_factory
+import govee_api.device as dev
 import govee_api.helper as helper
+import govee_api.command as cmd
 
 import requests
 import time
@@ -16,6 +18,10 @@ import enum
 import binascii
 
 
+# TODO: Bluetooth callback (e.g. data received, connected, disconnected)
+# TODO: Bluetooth status request?
+# TODO: IOT interface for devices (marker interface)
+
 
 _GOVEE_API_PROTOCOL = 'https'
 _GOVEE_API_HOST = 'app.govee.com'
@@ -27,13 +33,6 @@ _GOVEE_MQTT_BROKER_HOST = 'aqm3wd1qlc3dy-ats.iot.us-east-1.amazonaws.com'
 _GOVEE_MQTT_BROKER_PORT = 8883
 _GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC = '00010203-0405-0607-0809-0a0b0c0d2b11'
 
-
-
-class BluetoothCommand(enum.IntEnum):
-    """ A Bluetooth control command packet's type """
-    TURN = 0x01
-    BRIGHTNESS = 0x04
-    COLOR = 0x05
 
 
 class GoveeException(Exception):
@@ -260,8 +259,8 @@ class Govee(object):
         self.__http_update_device_list()
 
         # Fetch status for each known device via MQTT
-        for dev in self.__devices.values():
-            dev.request_status()
+        for gdev in self.__devices.values():
+            gdev.request_status()
 
     def __http_update_device_list(self):
         """
@@ -453,23 +452,40 @@ class Govee(object):
         else:
             return False
 
-    def _publish_bt_payload(self, device, command, data):
+    def _publish_command(self, device, command):
+        """ Publish command to device """
+
+        # At first, check if device is connected with IOT (or in case of an status command: if the device is theoretically capable of handling IOT messages).
+        # If yes, send message via MQTT
+        iot_sent = False
+        if False: #device.connection_status & dev.ConnectionStatus.IOT_CONNECTED == dev.ConnectionStatus.IOT_CONNECTED or (isinstance(command, cmd.StatusCommand) and True): #TODO: True -> IOT capable?
+            iot_sent = self.__publish_iot_payload(device, command)
+
+        # In case nothing was sent via MQTT, do data transfer via Bluetooth connection
+        if not iot_sent:
+            self.__publish_bt_payload(device, command)
+
+
+    def __publish_bt_payload(self, device, command):
         """ Publish Bluetooth message to device """
     
         if not self.__init_bluetooth_if_required():
             # Unable to initialize Bluetooth
             return
 
-        if len(data) > 17:
-            raise GoveeException('Bluetooth data payload too long. Command: {}, Data: {}'.format(command, binascii.hexlify(data)))
+        payload = command.get_bt_payload()
+        if not payload:
+            return
+
+        if len(payload[1]) > 17:
+            raise GoveeException('Bluetooth data payload too long. Command: {}, Data: {}'.format(payload[0], binascii.hexlify(payload[1])))
 
         bt = None
         if device._bt_address in self.__bluetooth_connections.keys():
-            print('Using existing BT connection to device', device._bt_address)
             bt = self.__bluetooth_connections[device._bt_address]
         else:
-            print('Connecting to BT device', device._bt_address)
             retries = 0
+            last_exception = None
             while retries < 10:
                 try:
                     if isinstance(self.__bluetooth_adapter, pygatt.GATTToolBackend):
@@ -478,16 +494,16 @@ class Govee(object):
                         bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=2)
                     self.__bluetooth_connections[device._bt_address] = bt
                     break
-                except:
+                except Exception as e:
+                    last_exception = e
                     retries = retries + 1
             if retries == 10:
-                print('Unable to connect to device',device._bt_address)
+                self.on_error(self, device, 'Unable to connect to device via Bluetooth', last_exception)
                 return
 
-        print('Sending BT data to device',device._bt_address)
-
         # Build Bluetooth packet data and pad it to a length of 19 bytes
-        packet = bytes([0x33, command]) + bytes(data)
+        print(payload)
+        packet = bytes([0x33, payload[0]]) + bytes(payload[1])
         packet += bytes([0x00] * (19 - len(packet)))
 
         # Calculate checksum by XORing all data bytes and add it to the end of the packet
@@ -498,25 +514,26 @@ class Govee(object):
 
         # Send data
         try:
-            bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, bytearray(packet)) # Set wait for response to FALSE
+            bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, bytearray(packet))
         except Exception as e:
             self.on_error(self, device, 'Unable to send data ({}) via Bluetooth'.format(binascii.hexlify(packet)), e)
-            # TODO: Retry feature
             if bt:
                 try:
                     bt.disconnect()
                 except:
                     pass
 
-    def _publish_iot_payload(self, device, command, data):
+    def __publish_iot_payload(self, device, command):
         """ Publish IOT/MQTT message to device """
+
+        int_payload = command.get_iot_payload()
 
         payload = {
             'msg': {
                 'accountTopic': self.__mqtt_topic,
-                'cmd': command,
+                'cmd': int_payload[0],
                 'cmdVersion': 0,
-                'data': data,
+                'data': int_payload[1],
                 'transaction': str(self.__current_milli_time()),
                 'type': 1
             }
@@ -542,8 +559,10 @@ class Govee(object):
 
         try:
             self.__mqtt_connection.publish(device._topic, json_payload, 0)
+            return True
         except Exception as e:
             self.on_error(self, device, 'Unable to send data ({}) via MQTT'.format(json_payload), e)
+            return False
 
     def __get_absolute_cert_files(self):
         """ Gets the absolute paths to the to-be-used cert file and private key """

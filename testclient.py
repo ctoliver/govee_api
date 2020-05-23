@@ -148,7 +148,7 @@ def _on_error(govee_cli, dev, message, exception):
     """ API error event """
 
     if dev:
-        print('ERROR [{}][{}][{}][{}] -> {}'.format(dev.identifier, dev.sku, dev.friendly_name, dev.name, message))
+        print('ERROR [{}][{} {}][{}] -> {}'.format(dev.identifier, dev.sku, dev.friendly_name, dev.name, message))
     else:
         print('ERROR -> {}'.format(message))
 
