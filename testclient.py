@@ -119,14 +119,12 @@ def main():
 def _on_new_device(govee_cli, dev, raw_data):
     """ New device event """
 
-    connected_str = _get_connected_str(dev.connected)
     print('NEW DEVICE [{}][{} {}] {} -> Connected: {}'.format(dev.identifier, dev.sku, dev.friendly_name, dev.name, \
-         connected_str))
+         dev.connection_status))
 
 def _on_device_update(govee_cli, dev, raw_data):
     """ Device update event """
 
-    connected_str = _get_connected_str(dev.connected)
     on_str = 'No'
     if dev.on:
         on_str = 'Yes'
@@ -138,22 +136,10 @@ def _on_device_update(govee_cli, dev, raw_data):
         elif dev.color_temperature and dev.color_temperature > 0:
             color_str = '{} Kelvin'.format(dev.color_temperature)
         print('DEVICE UPDATE [{}][{} {}] {} -> Connected: {}, On: {}, Brightness: {}, Color: {}'.format(dev.identifier, \
-            dev.sku, dev.friendly_name, dev.name, connected_str, on_str, dev.brightness, color_str))
+            dev.sku, dev.friendly_name, dev.name, dev.connection_status, on_str, dev.brightness, color_str))
     else:
         print('DEVICE UPDATE [{}][{} {}] {} -> Connected: {}, On: {}, Brightness: {}'.format(dev.identifier, dev.sku, \
-            dev.friendly_name, dev.name, connected_str, on_str, dev.brightness))
-
-
-# Helper
-def _get_connected_str(connected):
-    """ Get connection status string """
-
-    connected_str = 'No'
-    if connected:
-        connected_str = 'Yes'
-    elif connected is None:
-        connected_str = '???'
-    return connected_str
+            dev.friendly_name, dev.name, dev.connection_status, on_str, dev.brightness))
 
 
 if __name__ == '__main__':

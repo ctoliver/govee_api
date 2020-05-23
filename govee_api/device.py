@@ -101,7 +101,12 @@ class GoveeDevice(abc.ABC):
     def _publish_iot_command(self, command, data):
         """ Build command to control Govee Smart device """
 
-        self.__govee._publish_bt_payload(self, gapi.BluetoothCommand.COLOR, (255, 255, 0))
+        command = [
+            0x02, # Manual mode
+            0xff, 0xff, 0xff, 0x01,
+            *(255, 255, 0) # Color
+        ]
+        self.__govee._publish_bt_payload(self, gapi.BluetoothCommand.COLOR, command)
         #self.__govee._publish_iot_payload(self, command, data)
 
 
@@ -244,7 +249,8 @@ class GoveeRgbLight(GoveeLight):
             green = int(round(val.green * 255))
             blue = int(round(val.blue * 255))
         elif isinstance(val, tuple) and len(val) == 3:
-            if int(round(self.__color.red * 255)) == val[0] and \
+            if self.__color and \
+               int(round(self.__color.red * 255)) == val[0] and \
                int(round(self.__color.get_green * 255)) == val[1] and \
                int(round(self.__color.blue * 255)) == val[20]:
                 return

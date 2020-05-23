@@ -16,6 +16,10 @@ import enum
 
 
 
+import binascii # TODO: Remove
+
+
+
 _GOVEE_API_PROTOCOL = 'https'
 _GOVEE_API_HOST = 'app.govee.com'
 _GOVEE_APP_VERSION = '3.2.1'
@@ -446,13 +450,16 @@ class Govee(object):
 
     def _publish_bt_payload(self, device, command, data):
         """ Publish Bluetooth message to device """
+    
         if not self.__init_bluetooth_if_required():
             # Unable to initialize Bluetooth
             return
         if len(data) > 17:
             raise GoveeException('Bluetooth data payload too long. Command: {}, Data: {}'.format(command, data))
 
-        #try:
+        #if device.identifier != 'A4:03:A4:C1:38:6A:81:22':
+        #    return # TODO: REMOVE!
+
         bt = None
         if device._bt_address in self.__bluetooth_connections.keys():
             print('Using existing BT connection to device', device._bt_address)
@@ -464,7 +471,7 @@ class Govee(object):
                 self.__bluetooth_connections[device._bt_address] = bt
             except:
                 print('Unable to connect to device',device._bt_address)
-            return
+                return
 
         print('BT device:', bt)
 
@@ -478,8 +485,12 @@ class Govee(object):
             checksum ^= byte
         packet += bytes([checksum & 0xFF])
 
+        # TEST
+        packet = bytes.fromhex('330502ffffff01ff932c0000000000000000008a')
+        print(binascii.hexlify(packet))
+        
         # Send data
-        bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, packet)
+        bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, bytearray(packet)) # Set wait for response to FALSE
         #except:
             # TODO: Status Log
             # Aber zuerst nochmal nen reconnect ausprobieren...!
