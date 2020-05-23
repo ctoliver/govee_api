@@ -455,12 +455,16 @@ class Govee(object):
         #try:
         bt = None
         if device._bt_address in self.__bluetooth_connections.keys():
-            print('Using existing BT connection')
+            print('Using existing BT connection to device', device._bt_address)
             bt = self.__bluetooth_connections[device._bt_address]
         else:
-            print('Connecting to BT device')
-            bt = self.__bluetooth_adapter.connect(device._bt_address)
-            self.__bluetooth_connections[device._bt_address] = bt
+            print('Connecting to BT device', device._bt_address)
+            try:
+                bt = self.__bluetooth_adapter.connect(device._bt_address)
+                self.__bluetooth_connections[device._bt_address] = bt
+            except:
+                print('Unable to connect to device',device._bt_address)
+            return
 
         print('BT device:', bt)
 
