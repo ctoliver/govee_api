@@ -466,10 +466,15 @@ class Govee(object):
             bt = self.__bluetooth_connections[device._bt_address]
         else:
             print('Connecting to BT device', device._bt_address)
-            try:
-                bt = self.__bluetooth_adapter.connect(device._bt_address)
-                self.__bluetooth_connections[device._bt_address] = bt
-            except:
+            retries = 0
+            while retries < 10:
+                try:
+                    bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=1, auto_reconnect=True)
+                    self.__bluetooth_connections[device._bt_address] = bt
+                    break
+                except:
+                    retries = retries + 1
+            if retries == 10:
                 print('Unable to connect to device',device._bt_address)
                 return
 
