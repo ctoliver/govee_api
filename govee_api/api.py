@@ -21,6 +21,7 @@ import binascii
 # TODO: Bluetooth callback (e.g. data received, connected, disconnected)
 # TODO: Bluetooth status request?
 # TODO: IOT interface for devices (marker interface)
+# TOOD: Separate color message for non-RGB lights!
 
 
 _GOVEE_API_PROTOCOL = 'https'
