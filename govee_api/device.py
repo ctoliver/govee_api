@@ -5,6 +5,13 @@ import colour
 import math
 import enum
 
+class IotConnectionStatus(enum.Enum):
+    """ Govee device IOT connection status """
+    UNKNOWN = enum.auto()
+    ONLINE = enum.auto()
+    OFFLINE = enum.auto()
+    NO_IOT = enum.auto()
+
 class ConnectionStatus(enum.Flag):
     """ Govee device connection status """
     OFFLINE = enum.auto()
@@ -25,10 +32,12 @@ class GoveeDevice(abc.ABC):
         self.__topic = topic
         self.__sku = sku
         self.__name = name
-        if iot_connected:
+        self.__iot_device = iot_connected != IotConnectionStatus.NO_IOT
+        if iot_connected == IotConnectionStatus.ONLINE:
             self.__connection_status = ConnectionStatus.IOT_CONNECTED
         else:
             self.__connection_status = ConnectionStatus.OFFLINE
+
 
     @property
     def identifier(self):
@@ -77,6 +86,12 @@ class GoveeDevice(abc.ABC):
         return self.__identifier[6:]
 
     @property
+    def _iot_device(self):
+        """ Gets the device has IOT (MQTT) capabilities """
+        
+        return self.__iot_device
+
+    @property
     def connection_status(self):
         """ Gets the device's connection status """
 
@@ -93,10 +108,34 @@ class GoveeDevice(abc.ABC):
 
         conn = state['connected']
         if (isinstance(conn, bool) and conn) or conn == 'true' :
-            self.__connection_status = self.__connection_status | ConnectionStatus.IOT_CONNECTED
-            self.__connection_status = self.__connection_status & ~ConnectionStatus.OFFLINE
+            self._add_connection_status(ConnectionStatus.IOT_CONNECTED)
         else:
-            self.__connection_status = self.__connection_status & ~ConnectionStatus.IOT_CONNECTED
+            self._remove_connection_status(ConnectionStatus.IOT_CONNECTED)
+
+    def _add_connection_status(self, status):
+        """ Add connection status to device """
+
+        status_changed = self.__connection_status & status != status
+
+        self.__connection_status = self.__connection_status | status
+        if status != ConnectionStatus.OFFLINE:
+              self.__connection_status = self.__connection_status & ~ConnectionStatus.OFFLINE
+              status_changed = True
+
+        return status_changed
+
+    def _remove_connection_status(self, status):
+        """ Remove connection status from device """
+
+        status_changed = self.__connection_status & status == status
+
+        self.__connection_status = self.__connection_status & ~status
+        if not self.__connection_status:
+              self.__connection_status = ConnectionStatus.OFFLINE
+              status_changed = True
+
+        return status_changed
+
 
     def _publish_command(self, command):
         """ Build command to control Govee Smart device """
@@ -234,8 +273,8 @@ class GoveeRgbLight(GoveeLight):
         elif isinstance(val, tuple) and len(val) == 3:
             if self.__color and \
                int(round(self.__color.red * 255)) == val[0] and \
-               int(round(self.__color.get_green * 255)) == val[1] and \
-               int(round(self.__color.blue * 255)) == val[20]:
+               int(round(self.__color.green * 255)) == val[1] and \
+               int(round(self.__color.blue * 255)) == val[2]:
                 return None
             red = val[0]
             green = val[1]

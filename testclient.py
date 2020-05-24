@@ -93,6 +93,12 @@ def main():
             # Wait a second
             time.sleep(1)
 
+            # Set color to white
+            dev.color = colour.Color('#ffffff')
+
+            # Wait a second
+            time.sleep(1)
+
             # Set color to dodgerblue
             dev.color = colour.Color('dodgerblue')
 
@@ -116,6 +122,9 @@ def main():
         dev.on = False
 
     print('All done!')
+
+    time.sleep(10) # Wait for last event
+
 
 
 # Event handlers
@@ -151,6 +160,8 @@ def _on_error(govee_cli, dev, message, exception):
         print('ERROR [{}][{} {}][{}] -> {}'.format(dev.identifier, dev.sku, dev.friendly_name, dev.name, message))
     else:
         print('ERROR -> {}'.format(message))
+    if exception:
+        print('   -> {}'.format(exception))
 
 
 if __name__ == '__main__':

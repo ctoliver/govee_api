@@ -16,12 +16,8 @@ import json
 import pygatt
 import enum
 import binascii
+import traceback
 
-
-# TODO: Bluetooth callback (e.g. data received, connected, disconnected)
-# TODO: Bluetooth status request?
-# TODO: IOT interface for devices (marker interface)
-# TOOD: Separate color message for non-RGB lights!
 
 
 _GOVEE_API_PROTOCOL = 'https'
@@ -233,6 +229,11 @@ class Govee(object):
                 except:
                     pass
             
+            # Remove IOT-connected flag from devices
+            for gdev in self.__devices.values():
+                if gdev._remove_connection_status(dev.ConnectionStatus.IOT_CONNECTED):
+                    self.on_device_update(self, gdev, None)
+
             # Setup MQTT broker connection
             self.__mqtt_connection = AWSIoTPythonSDK.MQTTLib.AWSIoTMQTTClient(self.__client_id)
             self.__mqtt_connection.configureEndpoint(_GOVEE_MQTT_BROKER_HOST, _GOVEE_MQTT_BROKER_PORT)
@@ -341,10 +342,15 @@ class Govee(object):
                     continue
                 last_device_data = json.loads(raw_device['deviceExt']['lastDeviceData'])
                 if 'online' in last_device_data.keys():
-                    connected = last_device_data['online']
+                    if last_device_data['online']:
+                        iot_connected = dev.IotConnectionStatus.ONLINE
+                    else:
+                        iot_connected = dev.IotConnectionStatus.OFFLINE
+                elif not 'wifiName' in device_settings:
+                    iot_connected = dev.IotConnectionStatus.NO_IOT
                 else:
-                    connected = None
-                device = device_factory.build(self, identifier, topic, sku, name, connected)
+                    iot_connected = dev.IotConnectionStatus.UNKNOWN
+                device = device_factory.build(self, identifier, topic, sku, name, iot_connected)
                 if device:
                     self.__devices[identifier] = device
                     self.on_new_device(self, device, raw_device)
@@ -445,8 +451,8 @@ class Govee(object):
             try:
                 self.__bluetooth_adapter.start()
                 return self.__bluetooth_adapter._running.is_set()
-            except Exception as e:
-                self.on_error(self, None, 'Unable to initialize Bluetooth adapter', e)
+            except Exception:
+                self.on_error(self, None, 'Unable to initialize Bluetooth adapter', traceback.format_exc())
                 return False
         if self.__bluetooth_adapter and self.__bluetooth_adapter._running:
             return self.__bluetooth_adapter._running.is_set()
@@ -459,7 +465,8 @@ class Govee(object):
         # At first, check if device is connected with IOT (or in case of an status command: if the device is theoretically capable of handling IOT messages).
         # If yes, send message via MQTT
         iot_sent = False
-        if False: #device.connection_status & dev.ConnectionStatus.IOT_CONNECTED == dev.ConnectionStatus.IOT_CONNECTED or (isinstance(command, cmd.StatusCommand) and True): #TODO: True -> IOT capable?
+        if device._iot_device and (device.connection_status & dev.ConnectionStatus.IOT_CONNECTED == dev.ConnectionStatus.IOT_CONNECTED or
+                isinstance(command, cmd.StatusCommand)):
             iot_sent = self.__publish_iot_payload(device, command)
 
         # In case nothing was sent via MQTT, do data transfer via Bluetooth connection
@@ -483,20 +490,27 @@ class Govee(object):
 
         bt = None
         if device._bt_address in self.__bluetooth_connections.keys():
+            # Use already existing BT connection
             bt = self.__bluetooth_connections[device._bt_address]
         else:
             retries = 0
             last_exception = None
             while retries < 10:
                 try:
+                    # Connect to device via Bluetooth
                     if isinstance(self.__bluetooth_adapter, pygatt.GATTToolBackend):
                         bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=2, auto_reconnect=True)
                     else:
                         bt = self.__bluetooth_adapter.connect(device._bt_address, timeout=2)
                     self.__bluetooth_connections[device._bt_address] = bt
+
+                    # Set BT-connected flag on device
+                    if device._add_connection_status(dev.ConnectionStatus.BT_CONNECTED):
+                        self.on_device_update(self, device, None)
+
                     break
-                except Exception as e:
-                    last_exception = e
+                except Exception:
+                    last_exception = traceback.format_exc()
                     retries = retries + 1
             if retries == 10:
                 self.on_error(self, device, 'Unable to connect to device via Bluetooth', last_exception)
@@ -514,9 +528,15 @@ class Govee(object):
 
         # Send data
         try:
-            bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, bytearray(packet))
-        except Exception as e:
-            self.on_error(self, device, 'Unable to send data ({}) via Bluetooth'.format(binascii.hexlify(packet)), e)
+            bt.char_write(_GOVEE_BTLE_UUID_CONTROL_CHARACTERISTIC, bytearray(packet), wait_for_response=False)
+        except Exception:
+            self.on_error(self, device, 'Unable to send data ({}) via Bluetooth'.format(binascii.hexlify(packet).decode('utf-8') ), \
+                          traceback.format_exc())
+                          
+            # Remove BT-connected flag from device
+            if device._remove_connection_status(dev.ConnectionStatus.BT_CONNECTED):
+                self.on_device_update(self, device, None)
+
             if bt:
                 try:
                     bt.disconnect()
@@ -560,8 +580,13 @@ class Govee(object):
         try:
             self.__mqtt_connection.publish(device._topic, json_payload, 0)
             return True
-        except Exception as e:
-            self.on_error(self, device, 'Unable to send data ({}) via MQTT'.format(json_payload), e)
+        except Exception:
+            self.on_error(self, device, 'Unable to send data ({}) via MQTT'.format(json_payload), traceback.format_exc())
+            
+            # Remove IOT-connected flag from device
+            if device._remove_connection_status(dev.ConnectionStatus.IOT_CONNECTED):
+                self.on_device_update(self, device, None)
+
             return False
 
     def __get_absolute_cert_files(self):

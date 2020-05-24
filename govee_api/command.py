@@ -59,16 +59,17 @@ class ColorCommand(_AbstractCommand):
         self.__blue = blue
 
     def get_iot_payload(self):
-        return 'color', {
+        return ('color', {
             'red': self.__red,
             'green': self.__green,
             'blue': self.__blue
-        }
+        })
 
     def get_bt_payload(self):
         return (0x05, [
             0x02, # Manual mode
-            0xff, 0xff, 0xff, 0x01, # RGB color
+            0xFF, 0xFF, 0xFF, # Not used here, required for color temperature submission
+            0x01, # RGB color
             self.__red, self.__green, self.__blue
         ])
 
@@ -83,21 +84,21 @@ class ColorTemperatureCommand(_AbstractCommand):
         self.__blue = blue
 
     def get_iot_payload(self):
-        return 'colorTem', {
-            'color': {
+        return ('colorTem', {
+            'color': { # Color temperature in RGB
                 'red': self.__red,
                 'green': self.__green,
                 'blue': self.__blue
             },
-            'colorTemInKelvin': self.__color_temperature
-        }
+            'colorTemInKelvin': self.__color_temperature # Color temperature in Kelvin
+        })
 
     def get_bt_payload(self):
-        # TODO: Separate flag/data for color temperature?
         return (0x05, [
             0x02, # Manual mode
-            0xff, 0xff, 0xff, 0x01, # RGB color
-            self.__red, self.__green, self.__blue
+            self.__red, self.__green, self.__blue, # Color temperature in RGB
+            0x00, # Color temperature
+            0xFF, 0xFF, 0xFF # Not used here, required for color submission
         ])
 
 

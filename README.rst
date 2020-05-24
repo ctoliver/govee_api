@@ -77,9 +77,9 @@ In case something did not work, please provide me the RAW JSON data received via
 Not yet implemented
 -------------------
 
-* Bluetooth support
-* Detect which device is capable of IOT/MQTT control and which device requires Bluetooth control
 * String light support
+* Bluetooth-only color modes (Music, Scene, DIY)
+* Bluetooth events sent from devices (are there any?)
 
 
 
