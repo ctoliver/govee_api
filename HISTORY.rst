@@ -5,7 +5,7 @@ History
 2.0.0 (2020-05-24)
 ------------------
 
-* Added basic Bluetooth support. In case of IOT devices, it will fallback to BT when no IOT connection is possible.
+* Added basic Bluetooth support. In case of IOT devices, it will fallback to BT when no IOT connection is possible
 
 
 1.3.0 (2020-05-17)
